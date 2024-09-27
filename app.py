@@ -7,7 +7,7 @@ import pandas as pd
 import os
 
 # Load the data
-df = pd.read_csv('day_wise.csv')
+df = pd.read_csv('https://raw.githubusercontent.com/TREK1000/Final-Project/refs/heads/main/asset/day_wise.csv')
 df['Date'] = pd.to_datetime(df['Date'])
 
 # Initialize the Dash app

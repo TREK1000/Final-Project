@@ -4,6 +4,7 @@ from dash.dependencies import Input, Output
 import plotly.express as px
 import plotly.graph_objs as go
 import pandas as pd
+import os
 
 # Load the data
 df = pd.read_csv('day_wise.csv')
@@ -11,6 +12,7 @@ df['Date'] = pd.to_datetime(df['Date'])
 
 # Initialize the Dash app
 app = dash.Dash(__name__)
+server = app.server  # This line is important for Render deployment
 
 # Define the layout
 app.layout = html.Div([
@@ -81,4 +83,4 @@ def update_pie_chart(selected_date):
     return fig
 
 if __name__ == '__main__':
-    app.run_server(debug=True)
+    app.run_server(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))

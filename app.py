@@ -1,28 +1,13 @@
 import dash
-from dash import dcc, html, Input, Output
+from dash import dcc, html
+from dash.dependencies import Input, Output
 import plotly.express as px
 import plotly.graph_objs as go
 import pandas as pd
-import requests
-from io import StringIO
 
-# Load the COVID-19 data
-url = "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv"
-response = requests.get(url)
-covid_data = pd.read_csv(StringIO(response.text))
-
-# Melt the dataframe to convert dates from columns to rows
-covid_data_melted = covid_data.melt(id_vars=['Province/State', 'Country/Region', 'Lat', 'Long'], 
-                                    var_name='Date', value_name='Confirmed')
-
-# Convert Date to datetime
-covid_data_melted['Date'] = pd.to_datetime(covid_data_melted['Date'])
-
-# Group by Country/Region and Date, summing the Confirmed cases
-covid_data_grouped = covid_data_melted.groupby(['Country/Region', 'Date'])['Confirmed'].sum().reset_index()
-
-# Calculate new cases
-covid_data_grouped['New_Cases'] = covid_data_grouped.groupby('Country/Region')['Confirmed'].diff().fillna(0)
+# Load the data
+df = pd.read_csv('day_wise.csv')
+df['Date'] = pd.to_datetime(df['Date'])
 
 # Initialize the Dash app
 app = dash.Dash(__name__)
@@ -31,88 +16,69 @@ app = dash.Dash(__name__)
 app.layout = html.Div([
     html.H1("COVID-19 Dashboard"),
     
-    # Date range selector
-    dcc.DatePickerRange(
-        id='date-range',
-        start_date=covid_data_grouped['Date'].min(),
-        end_date=covid_data_grouped['Date'].max(),
-        display_format='YYYY-MM-DD'
-    ),
-    
-    # Dropdown for country selection
-    dcc.Dropdown(
-        id='country-dropdown',
-        options=[{'label': country, 'value': country} for country in covid_data_grouped['Country/Region'].unique()],
-        value=['US', 'India', 'Brazil'],  # Default selected countries
-        multi=True
-    ),
-    
     # Line chart
-    dcc.Graph(id='cases-trend'),
+    html.Div([
+        html.H2("Confirmed Cases Over Time"),
+        dcc.DatePickerRange(
+            id='date-range',
+            start_date=df['Date'].min(),
+            end_date=df['Date'].max(),
+            display_format='YYYY-MM-DD'
+        ),
+        dcc.Graph(id='line-chart')
+    ]),
     
     # Bar chart
-    dcc.Graph(id='top-countries'),
+    html.Div([
+        html.H2("Top 10 Countries with Most Confirmed Cases"),
+        dcc.Graph(id='bar-chart')
+    ]),
     
-    # Scatter plot
-    dcc.Graph(id='cases-vs-new-cases'),
-    
-    # Summary/Conclusion
-    html.Div(id='summary', style={'marginTop': 20, 'padding': 20, 'backgroundColor': '#f0f0f0'})
+    # Pie chart
+    html.Div([
+        html.H2("Case Distribution"),
+        dcc.Dropdown(
+            id='date-dropdown',
+            options=[{'label': date, 'value': date} for date in df['Date'].dt.strftime('%Y-%m-%d')],
+            value=df['Date'].max().strftime('%Y-%m-%d')
+        ),
+        dcc.Graph(id='pie-chart')
+    ])
 ])
 
-# Callback for updating all graphs and summary
+# Callback for line chart
 @app.callback(
-    [Output('cases-trend', 'figure'),
-     Output('top-countries', 'figure'),
-     Output('cases-vs-new-cases', 'figure'),
-     Output('summary', 'children')],
+    Output('line-chart', 'figure'),
     [Input('date-range', 'start_date'),
-     Input('date-range', 'end_date'),
-     Input('country-dropdown', 'value')]
+     Input('date-range', 'end_date')]
 )
-def update_graphs(start_date, end_date, selected_countries):
-    # Filter data based on date range and selected countries
-    filtered_df = covid_data_grouped[
-        (covid_data_grouped['Date'] >= start_date) & 
-        (covid_data_grouped['Date'] <= end_date) & 
-        (covid_data_grouped['Country/Region'].isin(selected_countries))
-    ]
-    
-    # Line chart: Confirmed cases trend over time
-    cases_trend = px.line(filtered_df, x='Date', y='Confirmed', color='Country/Region',
-                          title='COVID-19 Confirmed Cases Trend')
-    
-    # Bar chart: Top countries by total confirmed cases
-    top_countries = px.bar(
-        filtered_df.groupby('Country/Region')['Confirmed'].last().sort_values(ascending=False).reset_index(),
-        x='Country/Region', y='Confirmed', title='Total Confirmed Cases by Country'
-    )
-    
-    # Scatter plot: New cases vs Total cases
-    cases_vs_new_cases = px.scatter(filtered_df, x='Confirmed', y='New_Cases', color='Country/Region',
-                                    title='New Cases vs Total Cases', log_x=True, log_y=True)
-    
-    # Generate summary
-    total_cases = filtered_df.groupby('Country/Region')['Confirmed'].last().sum()
-    total_new_cases = filtered_df.groupby('Country/Region')['New_Cases'].sum().sum()
-    top_country = filtered_df.groupby('Country/Region')['Confirmed'].last().idxmax()
-    avg_daily_new_cases = total_new_cases / (pd.to_datetime(end_date) - pd.to_datetime(start_date)).days
-    
-    summary = [
-        html.H3("COVID-19 Summary"),
-        html.P(f"Total Confirmed Cases: {total_cases:,.0f}"),
-        html.P(f"Total New Cases: {total_new_cases:,.0f}"),
-        html.P(f"Average Daily New Cases: {avg_daily_new_cases:,.0f}"),
-        html.P(f"Country with Most Cases: {top_country}"),
-        html.P("Analysis: The dashboard shows the progression of COVID-19 cases across different countries. "
-               "The line chart illustrates the trend of confirmed cases over time, while the bar chart compares "
-               "total cases between countries. The scatter plot reveals the relationship between total cases and "
-               "new cases, which can indicate the current state of the pandemic in each country. This information "
-               "can be crucial for understanding the spread of the virus and the effectiveness of containment measures.")
-    ]
-    
-    return cases_trend, top_countries, cases_vs_new_cases, summary
+def update_line_chart(start_date, end_date):
+    filtered_df = df[(df['Date'] >= start_date) & (df['Date'] <= end_date)]
+    fig = px.line(filtered_df, x='Date', y='Confirmed', title='Confirmed Cases Over Time')
+    return fig
 
-# Run the app
+# Callback for bar chart
+@app.callback(
+    Output('bar-chart', 'figure'),
+    [Input('date-dropdown', 'value')]
+)
+def update_bar_chart(selected_date):
+    date_df = df[df['Date'] == selected_date]
+    top_10 = date_df.nlargest(10, 'Confirmed')
+    fig = px.bar(top_10, x='Confirmed', y='No. of countries', orientation='h', title=f'Top 10 Countries with Most Confirmed Cases on {selected_date}')
+    return fig
+
+# Callback for pie chart
+@app.callback(
+    Output('pie-chart', 'figure'),
+    [Input('date-dropdown', 'value')]
+)
+def update_pie_chart(selected_date):
+    date_df = df[df['Date'] == selected_date]
+    values = [date_df['Active'].values[0], date_df['Recovered'].values[0], date_df['Deaths'].values[0]]
+    labels = ['Active', 'Recovered', 'Deaths']
+    fig = px.pie(values=values, names=labels, title=f'Case Distribution on {selected_date}')
+    return fig
+
 if __name__ == '__main__':
     app.run_server(debug=True)

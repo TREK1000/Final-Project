@@ -7,8 +7,11 @@ import pandas as pd
 import os
 
 # Load the data
-df = pd.read_csv('https://raw.githubusercontent.com/TREK1000/Final-Project/refs/heads/main/asset/day_wise.csv')
+df = pd.read_csv('day_wise.csv')
 df['Date'] = pd.to_datetime(df['Date'])
+
+# Load country-specific data
+country_df = pd.read_csv('country_wise_latest.csv')
 
 # Initialize the Dash app
 app = dash.Dash(__name__)
@@ -33,6 +36,13 @@ app.layout = html.Div([
     # Bar chart
     html.Div([
         html.H2("Top 10 Countries with Most Confirmed Cases"),
+        dcc.DatePickerSingle(
+            id='date-picker',
+            min_date_allowed=df['Date'].min(),
+            max_date_allowed=df['Date'].max(),
+            initial_visible_month=df['Date'].max(),
+            date=df['Date'].max()
+        ),
         dcc.Graph(id='bar-chart')
     ]),
     
@@ -62,12 +72,22 @@ def update_line_chart(start_date, end_date):
 # Callback for bar chart
 @app.callback(
     Output('bar-chart', 'figure'),
-    [Input('date-dropdown', 'value')]
+    [Input('date-picker', 'date')]
 )
 def update_bar_chart(selected_date):
-    date_df = df[df['Date'] == selected_date]
-    top_10 = date_df.nlargest(10, 'Confirmed')
-    fig = px.bar(top_10, x='Confirmed', y='No. of countries', orientation='h', title=f'Top 10 Countries with Most Confirmed Cases on {selected_date}')
+    # Filter country data for the selected date
+    selected_date = pd.to_datetime(selected_date)
+    country_data = country_df.sort_values('Confirmed', ascending=False).head(10)
+    
+    fig = px.bar(
+        country_data,
+        x='Confirmed',
+        y='Country/Region',
+        orientation='h',
+        title=f'Top 10 Countries with Most Confirmed Cases as of {selected_date.strftime("%Y-%m-%d")}',
+        labels={'Confirmed': 'Confirmed Cases', 'Country/Region': 'Country'}
+    )
+    fig.update_yaxes(autorange="reversed")  # This will show the countries in descending order
     return fig
 
 # Callback for pie chart

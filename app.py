@@ -10,12 +10,10 @@ import os
 df = pd.read_csv('day_wise.csv')
 df['Date'] = pd.to_datetime(df['Date'])
 
-# Load country-specific data
-country_df = pd.read_csv('country_wise_latest.csv')
-
 # Initialize the Dash app
 app = dash.Dash(__name__)
-server = app.server  # This line is important for Render deployment
+# Make server variable accessible for Render
+server = app.server
 
 # Define the layout
 app.layout = html.Div([
@@ -35,7 +33,7 @@ app.layout = html.Div([
     
     # Bar chart
     html.Div([
-        html.H2("Top 10 Countries with Most Confirmed Cases"),
+        html.H2("New Cases by Date"),
         dcc.DatePickerSingle(
             id='date-picker',
             min_date_allowed=df['Date'].min(),
@@ -75,19 +73,20 @@ def update_line_chart(start_date, end_date):
     [Input('date-picker', 'date')]
 )
 def update_bar_chart(selected_date):
-    # Filter country data for the selected date
-    selected_date = pd.to_datetime(selected_date)
-    country_data = country_df.sort_values('Confirmed', ascending=False).head(10)
+    # Get the last 10 days of data up to the selected date
+    end_date = pd.to_datetime(selected_date)
+    start_date = end_date - pd.Timedelta(days=9)
+    
+    mask = (df['Date'] > start_date) & (df['Date'] <= end_date)
+    filtered_df = df.loc[mask].copy()
     
     fig = px.bar(
-        country_data,
-        x='Confirmed',
-        y='Country/Region',
-        orientation='h',
-        title=f'Top 10 Countries with Most Confirmed Cases as of {selected_date.strftime("%Y-%m-%d")}',
-        labels={'Confirmed': 'Confirmed Cases', 'Country/Region': 'Country'}
+        filtered_df,
+        x='Date',
+        y='New cases',
+        title=f'New Cases (Last 10 Days)',
+        labels={'New cases': 'New Cases', 'Date': 'Date'}
     )
-    fig.update_yaxes(autorange="reversed")  # This will show the countries in descending order
     return fig
 
 # Callback for pie chart
@@ -103,4 +102,4 @@ def update_pie_chart(selected_date):
     return fig
 
 if __name__ == '__main__':
-    app.run_server(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
+    app.run_server(debug=False)
